@@ -1,0 +1,68 @@
+name: Windows Test Build (unsigned)
+
+# Manual, on-demand build for testing a branch locally — not a release. No
+# code signing (no access to upstream's TAURI_SIGNING_PRIVATE_KEY from a
+# fork), no llama.cpp sidecar (stubbed, same as CI's cargo-check job) so this
+# stays fast (~5 min) instead of paying the ~20 min Vulkan SDK + sidecar build
+# that release.yml does. Windows SmartScreen will warn on the unsigned exe —
+# expected for a personal test build.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Branch/ref to build'
+        required: true
+        default: 'master'
+
+# Third-party actions pinned to a full commit SHA, matching the convention in
+# ci.yml/release.yml.
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: ${{ github.event.inputs.ref }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      # tauri-build hard-fails from build.rs when a declared externalBin file
+      # is missing. Stub it so this build doesn't pay the real llama.cpp
+      # compile — local-model chat won't work in this build, everything else
+      # (including the ComfyUI Create/gallery flow) will.
+      - name: Stub llama-server sidecar
+        shell: bash
+        run: |
+          mkdir -p src-tauri/bin
+          triple="$(rustc -vV | awk '/^host:/{print $2}')"
+          touch "src-tauri/bin/llama-server-$triple.exe"
+          ls -la src-tauri/bin/
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Build Tauri app (unsigned)
+        run: npm run tauri:build
+
+      - name: Upload installer artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: LU-windows-unsigned-${{ github.event.inputs.ref }}
+          path: |
+            src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/release/bundle/msi/*.msi
+          if-no-files-found: error
