@@ -26,6 +26,12 @@ jobs:
         with:
           ref: ${{ github.event.inputs.ref }}
 
+      # Artifact names reject '/' (branch names like fix/foo have one) — GHA
+      # expressions have no built-in replace(), so sanitize via shell instead.
+      - name: Sanitize ref for artifact name
+        shell: bash
+        run: echo "SAFE_REF=$(echo '${{ github.event.inputs.ref }}' | tr '/' '-')" >> "$GITHUB_ENV"
+
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
@@ -67,7 +73,7 @@ jobs:
       - name: Upload installer artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: LU-windows-unsigned-${{ github.event.inputs.ref }}
+          name: LU-windows-unsigned-${{ env.SAFE_REF }}
           path: |
             src-tauri/target/release/bundle/nsis/*.exe
             src-tauri/target/release/bundle/msi/*.msi
