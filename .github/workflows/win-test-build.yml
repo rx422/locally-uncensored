@@ -55,8 +55,14 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
+      # bundle.createUpdaterArtifacts is on in tauri.conf.json, which makes
+      # `tauri build` try to sign updater artifacts with TAURI_SIGNING_PRIVATE_KEY
+      # — a secret only upstream has, not available on a fork. Override it off
+      # via a merged config so the build doesn't fail after producing the
+      # installers (the actual .msi/.exe don't need signing to run locally).
       - name: Build Tauri app (unsigned)
-        run: npm run tauri:build
+        shell: bash
+        run: npx tauri build -c '{"bundle":{"createUpdaterArtifacts":false}}'
 
       - name: Upload installer artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
